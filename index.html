@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Match Agent</title>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    background:#f5f5f5;
+    margin:0;
+    padding:20px;
+}
+.app{
+    max-width:430px;
+    margin:auto;
+    background:white;
+    padding:25px;
+    border-radius:18px;
+}
+h1{margin-bottom:5px;}
+p{color:#666;}
+
+h3{margin-top:28px;}
+
+.options{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+}
+
+label{
+    border:1px solid #ddd;
+    padding:12px;
+    border-radius:10px;
+    cursor:pointer;
+}
+
+input{
+    margin-right:6px;
+}
+
+button{
+    width:100%;
+    margin-top:30px;
+    padding:16px;
+    border:0;
+    border-radius:12px;
+    background:#111;
+    color:white;
+    font-size:17px;
+    cursor:pointer;
+}
+
+#result{
+    margin-top:20px;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<h1>⚽ Match Agent</h1>
+<p>Choose when and where you can play.</p>
+<h3>Date</h3>
+
+<input type="date" id="matchDate">
+
+<h3>Time</h3>
+<div class="options">
+<label><input type="radio" name="mode" value="Fixed" checked>Fixed — one hour</label>
+<label><input type="radio" name="mode" value="Flexible">Flexible — multiple hours</label>
+</div>
+<div class="options">
+<label><input type="checkbox" value="4-5 PM">4–5 PM</label>
+<label><input type="checkbox" value="5-6 PM">5–6 PM</label>
+<label><input type="checkbox" value="6-7 PM">6–7 PM</label>
+<label><input type="checkbox" value="7-8 PM">7–8 PM</label>
+<label><input type="checkbox" value="8-9 PM">8–9 PM</label>
+<label><input type="checkbox" value="9-10 PM">9–10 PM</label>
+<label><input type="checkbox" value="10-11 PM">10–11 PM</label>
+</div>
+
+<h3>Pitch</h3>
+
+<div class="options">
+<label><input type="checkbox" value="Agdal">Agdal</label>
+<label><input type="checkbox" value="Hay Riad">Hay Riad</label>
+<label><input type="checkbox" value="Hay El Fath">Hay El Fath</label>
+</div>
+
+<button onclick="findMatch()">FIND ME A MATCH</button>
+
+<div id="result"></div>
+<button id="confirmButton" onclick="confirmSpot()" style="display:none;">
+CONFIRM MY SPOT
+</button>
+</div>
+
+<script>
+document.querySelectorAll('input[value$="PM"]').forEach(box => {
+    box.addEventListener('change', function() {
+        const mode = document.querySelector('input[name="mode"]:checked').value;
+
+        if (mode === "Fixed" && this.checked) {
+            document.querySelectorAll('input[value$="PM"]').forEach(other => {
+                if (other !== this) other.checked = false;
+            });
+        }
+    });
+});
+let selectedMatch = null;
+
+async function findMatch() {
+
+const matchDate = document.getElementById("matchDate").value;
+
+if (!matchDate) {
+    document.getElementById("result").innerText =
+        "Please select a date.";
+    return;
+}
+
+    const choices = [...document.querySelectorAll('input:checked')]
+        .map(x => x.value);
+
+    const times = choices.filter(x => x.includes("PM"));
+    const pitches = choices.filter(x => !x.includes("PM"));
+
+    if (times.length === 0 || pitches.length === 0) {
+        document.getElementById("result").innerText =
+            "Please select at least one time and one pitch.";
+        return;
+    }
+
+    try {
+        const response = await fetch("/availability");
+        const text = await response.text();
+
+        const lines = text
+    .split(/\r?\n/)
+    .map(x => x.trim())
+    .filter(x => x !== "");
+
+const knownPitches = ["Agdal", "Hay Riad", "Hay El Fath"];
+const knownTimes = [
+    "4-5 PM", "5-6 PM", "6-7 PM", "7-8 PM",
+    "8-9 PM", "9-10 PM", "10-11 PM"
+];
+
+const data = [];
+
+for (let i = 0; i < lines.length; i++) {
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(lines[i]) &&
+    knownPitches.includes(lines[i + 1])) {
+
+const date = lines[i];
+const pitch = lines[i + 1];
+const time = lines[i + 2];
+const status = lines[i + 3];
+const spots = lines[i + 4];
+
+        if (knownTimes.includes(time)) {
+            data.push({
+                date,
+    pitch,
+    time,
+    status,
+    spots
+            });
+        }
+    }
+}
+
+const matches = data.filter(item =>
+    item.date === matchDate &&
+    pitches.includes(item.pitch) &&
+    times.includes(item.time) &&
+    item.status === "Available" &&
+    Number(item.spots) > 0
+);
+
+        if (matches.length > 0) {
+    matches.sort((a, b) => Number(a.spots) - Number(b.spots));
+    const best = matches[0];
+selectedMatch = best;
+selectedMatch.date = matchDate;
+
+            document.getElementById("result").innerHTML =
+    "⚽ MATCH AVAILABLE<br><br>" +
+best.date + "<br>" +
+best.pitch + "<br>" +
+best.time + "<br>" +
+best.spots + " spots left";
+
+document.getElementById("confirmButton").style.display = "block";
+        } else {
+            document.getElementById("result").innerText =
+                "No match available for your choices.";
+        }
+
+    } catch (error) {
+        document.getElementById("result").innerText =
+            "Could not read availability.";
+    }
+}
+
+function confirmSpot() {
+
+    if (!selectedMatch) return;
+
+    const message =
+        "⚽ Match Confirmation\n\n" +
+        "Date: " + selectedMatch.date + "\n" +
+"Pitch: " + selectedMatch.pitch + "\n" +
+"Time: " + selectedMatch.time + "\n\n" +
+        "I confirm my spot.";
+
+    const whatsappURL =
+        "https://wa.me/212672339683?text=" +
+        encodeURIComponent(message);
+
+    window.open(whatsappURL, "_blank");
+
+    document.getElementById("result").innerHTML =
+        "✅ CONFIRMED<br><br>" +
+        selectedMatch.pitch + "<br>" +
+        selectedMatch.time + "<br><br>" +
+        "Please send the WhatsApp message to the organizer.";
+
+    document.getElementById("confirmButton").style.display = "none";
+}
+
+</script>
+
+</body>
+</html>
