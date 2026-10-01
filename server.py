@@ -1,5 +1,6 @@
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import urllib.request
+import os
 
 GOOGLE_SOURCE = "https://docs.google.com/document/d/1Uf8Zd6zfZyoXeNniPSCJhdl61xBEMS5k/export?format=txt"
 
@@ -29,4 +30,5 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
 print("Match Agent running at http://localhost:8000")
 
-HTTPServer(("0.0.0.0", 8000), MatchAgentServer).serve_forever()
+port = int(os.environ.get("PORT", 8000))
+HTTPServer(("0.0.0.0", port), MatchAgentServer).serve_forever()
