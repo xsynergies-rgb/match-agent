@@ -134,20 +134,58 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
     def do_GET(self):
 
         if self.path == "/availability":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"AVAILABILITY UNAVAILABLE")
+                return
 
             try:
-                with urllib.request.urlopen(GOOGLE_SOURCE) as response:
-                    data = response.read()
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT pitches.city, matches.date, pitches.name, matches.time, matches.status, matches.spots_left
+                            FROM matches
+                            JOIN pitches ON matches.pitch_id = pitches.id
+                            WHERE pitches.status = 'Active'
+                              AND matches.status = 'Available'
+                              AND matches.spots_left > 0
+                            ORDER BY matches.date ASC,
+                                     pitches.city ASC,
+                                     pitches.name ASC,
+                                     matches.id ASC;
+                        """)
+                        rows = cur.fetchall()
+
+                lines = []
+                for row in rows:
+                    city, date_val, pitch_name, match_time, status, spots_left = row
+                    date_str = date_val.strftime("%Y-%m-%d") if hasattr(date_val, "strftime") else str(date_val)
+                    lines.extend([
+                        str(city),
+                        date_str,
+                        str(pitch_name),
+                        str(match_time),
+                        str(status),
+                        str(spots_left)
+                    ])
+
+                output_text = "\n".join(lines)
+                if output_text:
+                    output_text += "\n"
 
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(data)
+                self.wfile.write(output_text.encode("utf-8"))
 
-            except Exception as error:
+            except Exception:
                 self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(str(error).encode())
+                self.wfile.write(b"AVAILABILITY UNAVAILABLE")
 
         elif self.path == "/db-test":
             database_url = os.environ.get("DATABASE_URL")
