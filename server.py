@@ -52,6 +52,83 @@ def init_db():
     except Exception:
         print("Database initialization failed safely.")
 
+def seed_db():
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return
+
+    pitches_data = [
+        ("Rabat", "Agdal"),
+        ("Rabat", "Hay Riad"),
+        ("Rabat", "Hay El Fath"),
+        ("Casablanca", "Maarif"),
+        ("Casablanca", "Oulfa"),
+        ("Casablanca", "Bernoussi"),
+        ("Marrakesh", "Gueliz"),
+        ("Marrakesh", "Mhamid"),
+        ("Marrakesh", "Targa"),
+    ]
+
+    time_slots = [
+        "4-5 PM",
+        "5-6 PM",
+        "6-7 PM",
+        "7-8 PM",
+        "8-9 PM",
+        "9-10 PM",
+        "10-11 PM",
+    ]
+
+    match_date = "2026-10-04"
+
+    specific_spots = {
+        ("Rabat", "Agdal"): 2,
+        ("Rabat", "Hay Riad"): 5,
+        ("Rabat", "Hay El Fath"): 7,
+        ("Casablanca", "Maarif"): 1,
+        ("Casablanca", "Oulfa"): 4,
+        ("Casablanca", "Bernoussi"): 6,
+        ("Marrakesh", "Gueliz"): 3,
+        ("Marrakesh", "Mhamid"): 8,
+        ("Marrakesh", "Targa"): 9,
+    }
+
+    try:
+        with psycopg.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                for city, name in pitches_data:
+                    cur.execute("""
+                        INSERT INTO pitches (city, name, status, owner_id)
+                        VALUES (%s, %s, 'Active', NULL)
+                        ON CONFLICT (city, name) DO NOTHING;
+                    """, (city, name))
+
+                conn.commit()
+
+                for city, name in pitches_data:
+                    cur.execute("""
+                        SELECT id FROM pitches WHERE city = %s AND name = %s;
+                    """, (city, name))
+                    row = cur.fetchone()
+                    if not row:
+                        continue
+                    pitch_id = row[0]
+
+                    for slot in time_slots:
+                        spots = 10
+                        if slot == "6-7 PM" and (city, name) in specific_spots:
+                            spots = specific_spots[(city, name)]
+
+                        cur.execute("""
+                            INSERT INTO matches (pitch_id, date, time, status, capacity, spots_left)
+                            VALUES (%s, %s, %s, 'Available', 10, %s)
+                            ON CONFLICT (pitch_id, date, time) DO NOTHING;
+                        """, (pitch_id, match_date, slot, spots))
+
+                conn.commit()
+    except Exception:
+        print("Database seeding failed safely.")
+
 class MatchAgentServer(SimpleHTTPRequestHandler):
 
     def do_GET(self):
@@ -147,6 +224,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
 
 init_db()
+seed_db()
 
 print("Match Agent running at http://localhost:8000")
 
