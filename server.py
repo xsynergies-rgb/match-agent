@@ -188,6 +188,48 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"AVAILABILITY UNAVAILABLE")
 
+        elif self.path == "/match-id":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"MATCH LOOKUP FAILED")
+                return
+
+            try:
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT matches.id
+                            FROM matches
+                            JOIN pitches ON matches.pitch_id = pitches.id
+                            WHERE pitches.city = %s
+                              AND pitches.name = %s
+                              AND matches.date = %s
+                              AND matches.time = %s;
+                        """, ("Casablanca", "Maarif", "2026-10-04", "6-7 PM"))
+                        row = cur.fetchone()
+
+                if row:
+                    match_id = row[0]
+                    response_text = f"MATCH ID: {match_id}"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(response_text.encode("utf-8"))
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b"MATCH NOT FOUND")
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"MATCH LOOKUP FAILED")
+
         elif self.path == "/db-test":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
