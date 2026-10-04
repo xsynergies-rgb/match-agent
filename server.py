@@ -104,6 +104,44 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"DATABASE CONNECTION FAILED")
 
+        elif self.path == "/db-tables":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"DATABASE TABLES MISSING")
+                return
+
+            try:
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT table_name 
+                            FROM information_schema.tables 
+                            WHERE table_schema = 'public' 
+                              AND table_name = ANY(%s);
+                        """, (['pitches', 'matches', 'reservations'],))
+                        rows = cur.fetchall()
+                        found_tables = {row[0] for row in rows}
+
+                if {'pitches', 'matches', 'reservations'}.issubset(found_tables):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b"DATABASE TABLES OK")
+                else:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b"DATABASE TABLES MISSING")
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"DATABASE TABLE CHECK FAILED")
+
         else:
             super().do_GET()
 
