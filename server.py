@@ -1,6 +1,7 @@
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import urllib.request
 import os
+import json
 import psycopg
 
 GOOGLE_SOURCE = "https://docs.google.com/document/d/1Uf8Zd6zfZyoXeNniPSCJhdl61xBEMS5k/export?format=txt"
@@ -297,6 +298,124 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/reserve":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"RESERVATION_FAILED"}')
+                return
+
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length)
+                data = json.loads(body.decode('utf-8'))
+            except Exception:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
+            if not isinstance(data, dict):
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
+            match_id = data.get("match_id")
+            if not isinstance(match_id, int):
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
+            player_name = data.get("player_name")
+            if player_name is not None and not isinstance(player_name, str):
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
+            player_phone = data.get("player_phone")
+            if player_phone is not None and not isinstance(player_phone, str):
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
+            conn = None
+            try:
+                conn = psycopg.connect(database_url)
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE matches
+                            SET
+                                spots_left = spots_left - 1,
+                                status = CASE
+                                    WHEN spots_left - 1 = 0 THEN 'Not Available'
+                                    ELSE status
+                                END
+                            WHERE id = %s
+                              AND status = 'Available'
+                              AND spots_left > 0
+                            RETURNING id, spots_left;
+                        """, (match_id,))
+                        row = cur.fetchone()
+
+                        if not row:
+                            raise ValueError("MATCH_UNAVAILABLE")
+
+                        updated_match_id, spots_left = row[0], row[1]
+
+                        cur.execute("""
+                            INSERT INTO reservations (match_id, player_name, player_phone, status)
+                            VALUES (%s, %s, %s, 'Confirmed')
+                            RETURNING id;
+                        """, (match_id, player_name, player_phone))
+                        res_row = cur.fetchone()
+                        reservation_id = res_row[0]
+
+                response_data = {
+                    "success": True,
+                    "reservation_id": reservation_id,
+                    "match_id": match_id,
+                    "spots_left": spots_left
+                }
+                response_bytes = json.dumps(response_data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(response_bytes)
+
+            except Exception as e:
+                if str(e) == "MATCH_UNAVAILABLE":
+                    self.send_response(409)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b'{"success":false,"error":"MATCH_UNAVAILABLE"}')
+                else:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b'{"success":false,"error":"RESERVATION_FAILED"}')
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+        else:
+            self.send_response(404)
+            self.end_headers()
 
 
 init_db()
