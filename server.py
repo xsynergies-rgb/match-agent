@@ -147,7 +147,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 with psycopg.connect(database_url) as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            SELECT pitches.city, matches.date, pitches.name, matches.time, matches.status, matches.spots_left
+                            SELECT matches.id, pitches.city, matches.date, pitches.name, matches.time, matches.status, matches.spots_left
                             FROM matches
                             JOIN pitches ON matches.pitch_id = pitches.id
                             WHERE pitches.status = 'Active'
@@ -162,9 +162,10 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
                 lines = []
                 for row in rows:
-                    city, date_val, pitch_name, match_time, status, spots_left = row
+                    match_id, city, date_val, pitch_name, match_time, status, spots_left = row
                     date_str = date_val.strftime("%Y-%m-%d") if hasattr(date_val, "strftime") else str(date_val)
                     lines.extend([
+                        str(match_id),
                         str(city),
                         date_str,
                         str(pitch_name),
