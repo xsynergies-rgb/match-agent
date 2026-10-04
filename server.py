@@ -219,6 +219,44 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"DATABASE TABLE CHECK FAILED")
 
+        elif self.path == "/db-seed-check":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"SEED DATA CHECK FAILED")
+                return
+
+            try:
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM pitches;")
+                        p_count = cur.fetchone()[0]
+                        cur.execute("SELECT COUNT(*) FROM matches;")
+                        m_count = cur.fetchone()[0]
+                        cur.execute("SELECT COUNT(*) FROM reservations;")
+                        r_count = cur.fetchone()[0]
+
+                if p_count == 9 and m_count == 63 and r_count == 0:
+                    response_text = f"PITCHES: {p_count}\nMATCHES: {m_count}\nRESERVATIONS: {r_count}\nSEED DATA OK"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(response_text.encode("utf-8"))
+                else:
+                    response_text = f"PITCHES: {p_count}\nMATCHES: {m_count}\nRESERVATIONS: {r_count}\nSEED DATA MISMATCH"
+                    self.send_response(500)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(response_text.encode("utf-8"))
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"SEED DATA CHECK FAILED")
+
         else:
             super().do_GET()
 
