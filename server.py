@@ -1,5 +1,6 @@
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import urllib.request
+from urllib.parse import urlparse, parse_qs
 import os
 import json
 import psycopg
@@ -133,8 +134,11 @@ def seed_db():
 class MatchAgentServer(SimpleHTTPRequestHandler):
 
     def do_GET(self):
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query_params = parse_qs(parsed_path.query)
 
-        if self.path == "/availability":
+        if path == "/availability":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -189,7 +193,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"AVAILABILITY UNAVAILABLE")
 
-        elif self.path == "/match-id":
+        elif path == "/match-id":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -231,7 +235,55 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"MATCH LOOKUP FAILED")
 
-        elif self.path == "/db-test":
+        elif path == "/reservation-count":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"RESERVATION COUNT FAILED")
+                return
+
+            match_id_vals = query_params.get("match_id")
+            if not match_id_vals or len(match_id_vals) != 1:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"INVALID MATCH ID")
+                return
+
+            try:
+                match_id = int(match_id_vals[0])
+                if match_id <= 0:
+                    raise ValueError()
+            except Exception:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"INVALID MATCH ID")
+                return
+
+            try:
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM reservations WHERE match_id = %s;", (match_id,))
+                        row = cur.fetchone()
+                        count = row[0] if row else 0
+
+                response_text = f"MATCH ID: {match_id}\nRESERVATIONS: {count}"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(response_text.encode("utf-8"))
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"RESERVATION COUNT FAILED")
+                return
+
+        elif path == "/db-test":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -263,7 +315,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"DATABASE CONNECTION FAILED")
 
-        elif self.path == "/db-tables":
+        elif path == "/db-tables":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -301,7 +353,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"DATABASE TABLE CHECK FAILED")
 
-        elif self.path == "/db-seed-check":
+        elif path == "/db-seed-check":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
