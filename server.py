@@ -266,11 +266,16 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
             try:
                 with psycopg.connect(database_url) as conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT COUNT(*) FROM reservations WHERE match_id = %s;", (match_id,))
-                        row = cur.fetchone()
-                        count = row[0] if row else 0
+                        cur.execute("SELECT id, created_at FROM reservations WHERE match_id = %s ORDER BY id ASC;", (match_id,))
+                        rows = cur.fetchall()
+                        count = len(rows)
 
-                response_text = f"MATCH ID: {match_id}\nRESERVATIONS: {count}"
+                lines = [f"MATCH ID: {match_id}", f"RESERVATIONS: {count}"]
+                for row in rows:
+                    res_id, created_at = row
+                    lines.append(f"ID: {res_id} | CREATED_AT: {created_at}")
+
+                response_text = "\n".join(lines)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
