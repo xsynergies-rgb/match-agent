@@ -11,9 +11,19 @@ def init_db():
     if not database_url:
         return
 
-    try:
+       try:
         with psycopg.connect(database_url) as conn:
             with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS pitch_owners (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        phone TEXT UNIQUE NOT NULL,
+                        auth_token TEXT UNIQUE NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'Active'
+                    );
+                """)
+
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS pitches (
                         id SERIAL PRIMARY KEY,
