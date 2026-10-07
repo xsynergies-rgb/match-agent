@@ -545,10 +545,17 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                             reservation_id = res_row[0]
                         else:
                             cur.execute("""
-                                SELECT id
+                                SELECT id, match_id
                                 FROM reservations
                                 WHERE request_id = %s;
                             """, (request_id,))
+
+                            existing_reservation = cur.fetchone()
+
+                            if existing_reservation[1] != match_id:
+                                raise ValueError("REQUEST_ID_MATCH_CONFLICT")
+
+                            reservation_id = existing_reservation[0]
                             reservation_id = cur.fetchone()[0]
 
                 response_data = {
