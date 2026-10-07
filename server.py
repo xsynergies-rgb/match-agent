@@ -60,6 +60,16 @@ def init_db():
                         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
+                cur.execute("""
+                    ALTER TABLE reservations
+                    ADD COLUMN IF NOT EXISTS request_id TEXT;
+                """)
+
+                cur.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS reservations_request_id_unique
+                    ON reservations (request_id)
+                    WHERE request_id IS NOT NULL;
+                """)
                 if PITCH_OWNER_TOKEN:
                     cur.execute("""
                         INSERT INTO pitch_owners (name, phone, auth_token)
@@ -466,6 +476,14 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
                 return
 
+            request_id = data.get("request_id")
+            if not isinstance(request_id, str) or not request_id.strip():
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
             player_name = data.get("player_name")
             if player_name is not None and not isinstance(player_name, str):
                 self.send_response(400)
@@ -502,12 +520,37 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                         updated_match_id, spots_left = row[0], row[1]
 
                         cur.execute("""
-                            INSERT INTO reservations (match_id, player_name, player_phone, status)
-                            VALUES (%s, %s, %s, 'Pending')
+                            INSERT INTO reservations (
+                                match_id,
+                                player_name,
+                                player_phone,
+                                status,
+                                request_id
+                            )
+                            VALUES (%s, %s, %s, 'Pending', %s)
+                            ON CONFLICT (request_id)
+                            WHERE request_id IS NOT NULL
+                            DO NOTHING
                             RETURNING id;
-                        """, (match_id, player_name, player_phone))
+                        """, (
+                            match_id,
+                            player_name,
+                            player_phone,
+                            request_id
+                        ))
+
                         res_row = cur.fetchone()
-                        reservation_id = res_row[0]
+
+                        if res_row:
+                            reservation_id = res_row[0]
+                        else:
+                            cur.execute("""
+                                SELECT id
+                                FROM reservations
+                                WHERE request_id = %s;
+                            """, (request_id,))
+                            reservation_id = cur.fetchone()[0]
+                            reservation_id = res_row[0]
 
                 response_data = {
                     "success": True,
