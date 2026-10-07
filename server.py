@@ -629,6 +629,14 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.wfile.write(b'{"success":false,"error":"CONFIRMATION_FAILED"}')
 
         elif self.path == "/decline-reservation":
+            provided_token = self.headers.get("X-Pitch-Owner-Token")
+
+            if not PITCH_OWNER_TOKEN or provided_token != PITCH_OWNER_TOKEN:
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"UNAUTHORIZED"}')
+                return
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
