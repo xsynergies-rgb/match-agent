@@ -339,43 +339,6 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"SEED DATA CHECK FAILED")
 
-        elif self.path == "/latest-reservation":
-            database_url = os.environ.get("DATABASE_URL")
-
-            try:
-                with psycopg.connect(database_url) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("""
-                            SELECT reservations.id,
-       reservations.match_id,
-       reservations.status,
-       matches.spots_left
-FROM reservations
-JOIN matches ON reservations.match_id = matches.id
-ORDER BY reservations.id DESC
-LIMIT 1;
-                        """)
-                        row = cur.fetchone()
-
-                if row:
-                    response_text = (
-                        f"RESERVATION ID: {row[0]}\n"
-                        f"MATCH ID: {row[1]}\n"
-                        f"STATUS: {row[2]}\n"
-                        f"SPOTS LEFT: {row[3]}"
-                    )
-                else:
-                    response_text = "NO RESERVATIONS"
-
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(response_text.encode("utf-8"))
-
-            except Exception:
-                self.send_response(500)
-                self.end_headers()
-
         else:
             super().do_GET()
 
