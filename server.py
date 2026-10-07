@@ -573,7 +573,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                                  AND r.status = 'Pending'
                                  AND (
                                    (po.auth_token = %s AND po.status = 'Active')
-          OR (%s IS NOT NULL AND %s = %s)
+          OR (%s::text IS NOT NULL AND %s::text = %s::text)
       )
     FOR UPDATE OF r;
 """, (
@@ -689,7 +689,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                               AND p.id = m.pitch_id
                               AND (
                                   (po.auth_token = %s AND po.status = 'Active')
-                                  OR (%s IS NOT NULL AND %s = %s)
+                                  OR (%s::text IS NOT NULL AND %s::text = %s::text)
                               )
                             RETURNING r.id, r.match_id;
                         """, (
