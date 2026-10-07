@@ -241,7 +241,34 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(b"MATCH LOOKUP FAILED")
+        elif self.path == "/latest-reservation":
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id, match_id, status
+                        FROM reservations
+                        ORDER BY id DESC
+                        LIMIT 1;
+                    """)
+                    row = cur.fetchone()
 
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+
+                if row:
+                    response = {
+                        "reservation_id": row[0],
+                        "match_id": row[1],
+                        "status": row[2]
+                    }
+                else:
+                    response = {"reservation": None}
+
+                self.wfile.write(json.dumps(response).encode("utf-8"))
+            finally:
+                conn.close()
         elif self.path == "/db-test":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
