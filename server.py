@@ -556,7 +556,6 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                                 raise ValueError("REQUEST_ID_MATCH_CONFLICT")
 
                             reservation_id = existing_reservation[0]
-                            reservation_id = cur.fetchone()[0]
 
                 response_data = {
                     "success": True,
