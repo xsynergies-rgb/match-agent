@@ -1,6 +1,5 @@
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import urllib.request
-from urllib.parse import urlparse, parse_qs
 import os
 import json
 import psycopg
@@ -46,7 +45,7 @@ def init_db():
                         match_id INTEGER NOT NULL REFERENCES matches(id),
                         player_name TEXT NULL,
                         player_phone TEXT NULL,
-                        status TEXT NOT NULL DEFAULT 'Confirmed',
+                        status TEXT NOT NULL DEFAULT 'Pending',
                         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
@@ -134,11 +133,8 @@ def seed_db():
 class MatchAgentServer(SimpleHTTPRequestHandler):
 
     def do_GET(self):
-        parsed_path = urlparse(self.path)
-        path = parsed_path.path
-        query_params = parse_qs(parsed_path.query)
 
-        if path == "/availability":
+        if self.path == "/availability":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -193,7 +189,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"AVAILABILITY UNAVAILABLE")
 
-        elif path == "/match-id":
+        elif self.path == "/match-id":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -235,60 +231,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"MATCH LOOKUP FAILED")
 
-        elif path == "/reservation-count":
-            database_url = os.environ.get("DATABASE_URL")
-            if not database_url:
-                self.send_response(500)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"RESERVATION COUNT FAILED")
-                return
-
-            match_id_vals = query_params.get("match_id")
-            if not match_id_vals or len(match_id_vals) != 1:
-                self.send_response(400)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"INVALID MATCH ID")
-                return
-
-            try:
-                match_id = int(match_id_vals[0])
-                if match_id <= 0:
-                    raise ValueError()
-            except Exception:
-                self.send_response(400)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"INVALID MATCH ID")
-                return
-
-            try:
-                with psycopg.connect(database_url) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT id, created_at FROM reservations WHERE match_id = %s ORDER BY id ASC;", (match_id,))
-                        rows = cur.fetchall()
-                        count = len(rows)
-
-                lines = [f"MATCH ID: {match_id}", f"RESERVATIONS: {count}"]
-                for row in rows:
-                    res_id, created_at = row
-                    lines.append(f"ID: {res_id} | CREATED_AT: {created_at}")
-
-                response_text = "\n".join(lines)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(response_text.encode("utf-8"))
-
-            except Exception:
-                self.send_response(500)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"RESERVATION COUNT FAILED")
-                return
-
-        elif path == "/db-test":
+        elif self.path == "/db-test":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -320,7 +263,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"DATABASE CONNECTION FAILED")
 
-        elif path == "/db-tables":
+        elif self.path == "/db-tables":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -358,7 +301,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"DATABASE TABLE CHECK FAILED")
 
-        elif path == "/db-seed-check":
+        elif self.path == "/db-seed-check":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -457,18 +400,12 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            UPDATE matches
-                            SET
-                                spots_left = spots_left - 1,
-                                status = CASE
-                                    WHEN spots_left - 1 = 0 THEN 'Not Available'
-                                    ELSE status
-                                END
-                            WHERE id = %s
-                              AND status = 'Available'
-                              AND spots_left > 0
-                            RETURNING id, spots_left;
-                        """, (match_id,))
+    SELECT id, spots_left
+    FROM matches
+    WHERE id = %s
+      AND status = 'Available'
+      AND spots_left > 0;
+""", (match_id,))
                         row = cur.fetchone()
 
                         if not row:
@@ -478,7 +415,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
                         cur.execute("""
                             INSERT INTO reservations (match_id, player_name, player_phone, status)
-                            VALUES (%s, %s, %s, 'Confirmed')
+                            VALUES (%s, %s, %s, 'Pending')
                             RETURNING id;
                         """, (match_id, player_name, player_phone))
                         res_row = cur.fetchone()
