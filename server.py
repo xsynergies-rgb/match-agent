@@ -64,6 +64,15 @@ def init_db():
                     ALTER TABLE reservations
                     ADD COLUMN IF NOT EXISTS request_id TEXT;
                 """)
+                cur.execute("""
+                    ALTER TABLE reservations
+                    ADD COLUMN IF NOT EXISTS player_age_range TEXT;
+                """)
+
+                cur.execute("""
+                    ALTER TABLE reservations
+                    ADD COLUMN IF NOT EXISTS player_gender TEXT;
+                """)
 
                 cur.execute("""
                     CREATE UNIQUE INDEX IF NOT EXISTS reservations_request_id_unique
