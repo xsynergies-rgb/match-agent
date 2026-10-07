@@ -648,13 +648,6 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
         elif self.path == "/decline-reservation":
             provided_token = self.headers.get("X-Pitch-Owner-Token")
-
-            if not PITCH_OWNER_TOKEN or provided_token != PITCH_OWNER_TOKEN:
-                self.send_response(401)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b'{"success":false,"error":"UNAUTHORIZED"}')
-                return
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -676,13 +669,18 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 with psycopg.connect(database_url) as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            UPDATE reservations
+                            UPDATE reservations r
                             SET status = 'Declined'
-                            WHERE id = %s
-                              AND status = 'Pending'
-                            RETURNING id, match_id;
-                        """, (reservation_id,))
-
+                            FROM matches m, pitches p, pitch_owners po
+                            WHERE r.id = %s
+                              AND r.status = 'Pending'
+                              AND m.id = r.match_id
+                              AND p.id = m.pitch_id
+                              AND po.id = p.owner_id
+                              AND po.auth_token = %s
+                              AND po.status = 'Active'
+                            RETURNING r.id, r.match_id;
+                        """, (reservation_id, provided_token))
                         reservation = cur.fetchone()
 
                         if not reservation:
