@@ -30,7 +30,7 @@ def init_db():
                         city TEXT NOT NULL,
                         name TEXT NOT NULL,
                         status TEXT NOT NULL DEFAULT 'Active',
-                        owner_id INTEGER NULL,
+                        owner_id INTEGER REFERENCES pitch_owners(id),
                         UNIQUE(city, name)
                     );
                 """)
