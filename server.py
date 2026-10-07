@@ -565,7 +565,8 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                     json.dumps({"success": False, "error": error}).encode("utf-8")
                 )
 
-            except Exception:
+            except Exception as e:
+                print("CONFIRMATION ERROR:", repr(e), flush=True)
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
