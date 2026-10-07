@@ -298,6 +298,38 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode("utf-8"))
             finally:
                 conn.close()
+        elif self.path == "/owner-pitches":
+            database_url = os.environ.get("DATABASE_URL")
+            with psycopg.connect(database_url) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            p.id,
+                            p.city,
+                            p.name,
+                            p.owner_id,
+                            po.name
+                        FROM pitches p
+                        LEFT JOIN pitch_owners po ON po.id = p.owner_id
+                        ORDER BY p.id;
+                    """)
+                    rows = cur.fetchall()
+
+            response = [
+                {
+                    "pitch_id": row[0],
+                    "city": row[1],
+                    "pitch": row[2],
+                    "owner_id": row[3],
+                    "owner": row[4]
+                }
+                for row in rows
+            ]
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode("utf-8"))
         elif self.path == "/db-test":
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
