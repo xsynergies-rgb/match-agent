@@ -550,7 +550,6 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                                 WHERE request_id = %s;
                             """, (request_id,))
                             reservation_id = cur.fetchone()[0]
-                            reservation_id = res_row[0]
 
                 response_data = {
                     "success": True,
