@@ -11,7 +11,7 @@ def init_db():
     if not database_url:
         return
 
-       try:
+    try:
         with psycopg.connect(database_url) as conn:
             with conn.cursor() as cur:
                 cur.execute("""
