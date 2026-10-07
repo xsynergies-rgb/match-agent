@@ -236,6 +236,55 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"AVAILABILITY UNAVAILABLE")
 
+        elif self.path.startswith("/reservation-status"):
+            from urllib.parse import urlparse, parse_qs
+
+            database_url = os.environ.get("DATABASE_URL")
+            query = parse_qs(urlparse(self.path).query)
+            request_id = query.get("request_id", [None])[0]
+
+            if not database_url or not request_id:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
+                return
+
+            try:
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT id, status
+                            FROM reservations
+                            WHERE request_id = %s;
+                        """, (request_id,))
+                        row = cur.fetchone()
+
+                if not row:
+                    self.send_response(404)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(b'{"success":false,"error":"RESERVATION_NOT_FOUND"}')
+                    return
+
+                reservation_id, status = row
+                response_data = {
+                    "success": True,
+                    "reservation_id": reservation_id,
+                    "status": status
+                }
+
+                response_bytes = json.dumps(response_data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(response_bytes)
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"STATUS_UNAVAILABLE"}')
         else:
             super().do_GET()
 
