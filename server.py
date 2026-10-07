@@ -541,6 +541,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
         elif self.path == "/confirm-reservation":
             provided_token = self.headers.get("X-Pitch-Owner-Token")
+            admin_token = os.environ.get("GLOCAL_SPORT_ADMIN_TOKEN")
 
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
@@ -563,17 +564,25 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 with psycopg.connect(database_url) as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            SELECT r.match_id
-                            FROM reservations r
-                            JOIN matches m ON m.id = r.match_id
-                            JOIN pitches p ON p.id = m.pitch_id
-                            JOIN pitch_owners po ON po.id = p.owner_id
-                            WHERE r.id = %s
-                              AND r.status = 'Pending'
-                              AND po.auth_token = %s
-                              AND po.status = 'Active'
-                            FOR UPDATE OF r;
-                        """, (reservation_id, provided_token))
+                                SELECT r.match_id
+                               FROM reservations r
+                               JOIN matches m ON m.id = r.match_id
+                               JOIN pitches p ON p.id = m.pitch_id
+                               LEFT JOIN pitch_owners po ON po.id = p.owner_id
+                               WHERE r.id = %s
+                                 AND r.status = 'Pending'
+                                 AND (
+                                   (po.auth_token = %s AND po.status = 'Active')
+          OR (%s IS NOT NULL AND %s = %s)
+      )
+    FOR UPDATE OF r;
+""", (
+    reservation_id,
+    provided_token,
+    admin_token,
+    provided_token,
+    admin_token
+))
 
                         reservation = cur.fetchone()
 
@@ -648,6 +657,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
         elif self.path == "/decline-reservation":
             provided_token = self.headers.get("X-Pitch-Owner-Token")
+            admin_token = os.environ.get("GLOCAL_SPORT_ADMIN_TOKEN")
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
@@ -671,16 +681,24 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                         cur.execute("""
                             UPDATE reservations r
                             SET status = 'Declined'
-                            FROM matches m, pitches p, pitch_owners po
+                            FROM matches m, pitches p
+                            LEFT JOIN pitch_owners po ON po.id = p.owner_id
                             WHERE r.id = %s
                               AND r.status = 'Pending'
                               AND m.id = r.match_id
                               AND p.id = m.pitch_id
-                              AND po.id = p.owner_id
-                              AND po.auth_token = %s
-                              AND po.status = 'Active'
+                              AND (
+                                  (po.auth_token = %s AND po.status = 'Active')
+                                  OR (%s IS NOT NULL AND %s = %s)
+                              )
                             RETURNING r.id, r.match_id;
-                        """, (reservation_id, provided_token))
+                        """, (
+                            reservation_id,
+                            provided_token,
+                            admin_token,
+                            provided_token,
+                            admin_token
+                        ))
                         reservation = cur.fetchone()
 
                         if not reservation:
