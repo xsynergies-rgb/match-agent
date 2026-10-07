@@ -684,7 +684,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                         reservation = cur.fetchone()
 
                         if not reservation:
-                            raise ValueError("RESERVATION_NOT_PENDING")
+                            raise ValueError("UNAUTHORIZED_OR_NOT_PENDING")
 
                 response_data = {
                     "success": True,
@@ -702,8 +702,8 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
 
                 if error == "INVALID_REQUEST":
                     status_code = 400
-                elif error == "RESERVATION_NOT_PENDING":
-                    status_code = 409
+                elif error == "UNAUTHORIZED_OR_NOT_PENDING":
+                    status_code = 403
                 else:
                     status_code = 500
 
