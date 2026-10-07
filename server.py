@@ -450,6 +450,106 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                         conn.close()
                     except:
                         pass
+
+        elif self.path == "/confirm-reservation":
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"CONFIRMATION_FAILED"}')
+                return
+
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length)
+                data = json.loads(body.decode("utf-8"))
+
+                reservation_id = data.get("reservation_id")
+
+                if not isinstance(reservation_id, int):
+                    raise ValueError("INVALID_REQUEST")
+
+                with psycopg.connect(database_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT match_id
+                            FROM reservations
+                            WHERE id = %s
+                              AND status = 'Pending'
+                            FOR UPDATE;
+                        """, (reservation_id,))
+
+                        reservation = cur.fetchone()
+
+                        if not reservation:
+                            raise ValueError("RESERVATION_NOT_PENDING")
+
+                        match_id = reservation[0]
+
+                        cur.execute("""
+                            UPDATE matches
+                            SET
+                                spots_left = spots_left - 1,
+                                status = CASE
+                                    WHEN spots_left - 1 = 0 THEN 'Not Available'
+                                    ELSE status
+                                END
+                            WHERE id = %s
+                              AND status = 'Available'
+                              AND spots_left > 0
+                            RETURNING spots_left;
+                        """, (match_id,))
+
+                        match = cur.fetchone()
+
+                        if not match:
+                            raise ValueError("MATCH_UNAVAILABLE")
+
+                        spots_left = match[0]
+
+                        cur.execute("""
+                            UPDATE reservations
+                            SET status = 'Confirmed'
+                            WHERE id = %s;
+                        """, (reservation_id,))
+
+                response_data = {
+                    "success": True,
+                    "reservation_id": reservation_id,
+                    "status": "Confirmed",
+                    "spots_left": spots_left
+                }
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(response_data).encode("utf-8"))
+
+            except ValueError as e:
+                error = str(e)
+
+                if error == "INVALID_REQUEST":
+                    status_code = 400
+                elif error == "RESERVATION_NOT_PENDING":
+                    status_code = 409
+                elif error == "MATCH_UNAVAILABLE":
+                    status_code = 409
+                else:
+                    status_code = 500
+
+                self.send_response(status_code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({"success": False, "error": error}).encode("utf-8")
+                )
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"CONFIRMATION_FAILED"}')
         else:
             self.send_response(404)
             self.end_headers()
