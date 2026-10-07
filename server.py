@@ -5,6 +5,7 @@ import json
 import psycopg
 
 GOOGLE_SOURCE = "https://docs.google.com/document/d/1Uf8Zd6zfZyoXeNniPSCJhdl61xBEMS5k/export?format=txt"
+PITCH_OWNER_TOKEN = os.environ.get("PITCH_OWNER_TOKEN")
 
 def init_db():
     database_url = os.environ.get("DATABASE_URL")
@@ -462,6 +463,15 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                         pass
 
         elif self.path == "/confirm-reservation":
+            provided_token = self.headers.get("X-Pitch-Owner-Token")
+
+            if not PITCH_OWNER_TOKEN or provided_token != PITCH_OWNER_TOKEN:
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"UNAUTHORIZED"}')
+                return
+
             database_url = os.environ.get("DATABASE_URL")
             if not database_url:
                 self.send_response(500)
