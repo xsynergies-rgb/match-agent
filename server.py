@@ -506,56 +506,72 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-    SELECT id, spots_left
-    FROM matches
-    WHERE id = %s
-      AND status = 'Available'
-      AND spots_left > 0;
-""", (match_id,))
-                        row = cur.fetchone()
+                            SELECT r.id, r.match_id, m.spots_left
+                            FROM reservations r
+                            JOIN matches m ON m.id = r.match_id
+                            WHERE r.request_id = %s;
+                        """, (request_id,))
 
-                        if not row:
-                            raise ValueError("MATCH_UNAVAILABLE")
+                        existing_request = cur.fetchone()
 
-                        updated_match_id, spots_left = row[0], row[1]
+                        if existing_request:
+                            if existing_request[1] != match_id:
+                                raise ValueError("REQUEST_ID_MATCH_CONFLICT")
 
-                        cur.execute("""
-                            INSERT INTO reservations (
+                            reservation_id = existing_request[0]
+                            spots_left = existing_request[2]
+                        else:
+                            cur.execute("""
+                                SELECT id, spots_left
+                                FROM matches
+                                WHERE id = %s
+                                  AND status = 'Available'
+                                  AND spots_left > 0;
+                            """, (match_id,))
+                            row = cur.fetchone()
+
+                            if not row:
+                                raise ValueError("MATCH_UNAVAILABLE")
+
+                            updated_match_id, spots_left = row[0], row[1]
+
+                            cur.execute("""
+                                INSERT INTO reservations (
+                                    match_id,
+                                    player_name,
+                                    player_phone,
+                                    status,
+                                    request_id
+                                )
+                                VALUES (%s, %s, %s, 'Pending', %s)
+                                ON CONFLICT (request_id)
+                                WHERE request_id IS NOT NULL
+                                DO NOTHING
+                                RETURNING id;
+                            """, (
                                 match_id,
                                 player_name,
                                 player_phone,
-                                status,
                                 request_id
-                            )
-                            VALUES (%s, %s, %s, 'Pending', %s)
-                            ON CONFLICT (request_id)
-                            WHERE request_id IS NOT NULL
-                            DO NOTHING
-                            RETURNING id;
-                        """, (
-                            match_id,
-                            player_name,
-                            player_phone,
-                            request_id
-                        ))
+                            ))
 
-                        res_row = cur.fetchone()
+                            res_row = cur.fetchone()
 
-                        if res_row:
-                            reservation_id = res_row[0]
-                        else:
-                            cur.execute("""
-                                SELECT id, match_id
-                                FROM reservations
-                                WHERE request_id = %s;
-                            """, (request_id,))
+                            if res_row:
+                                reservation_id = res_row[0]
+                            else:
+                                cur.execute("""
+                                    SELECT id, match_id
+                                    FROM reservations
+                                    WHERE request_id = %s;
+                                """, (request_id,))
 
-                            existing_reservation = cur.fetchone()
+                                existing_reservation = cur.fetchone()
 
-                            if existing_reservation[1] != match_id:
-                                raise ValueError("REQUEST_ID_MATCH_CONFLICT")
+                                if existing_reservation[1] != match_id:
+                                    raise ValueError("REQUEST_ID_MATCH_CONFLICT")
 
-                            reservation_id = existing_reservation[0]
+                                reservation_id = existing_reservation[0]
 
                 response_data = {
                     "success": True,
