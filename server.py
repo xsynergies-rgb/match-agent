@@ -508,6 +508,21 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b'{"success":false,"error":"INVALID_REQUEST"}')
                 return
+            player_age_range = data.get("player_age_range")
+            if player_age_range not in ["Under 18", "18-24", "25-34", "35-44", "45+"]:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_AGE_RANGE"}')
+                return
+
+            player_gender = data.get("player_gender")
+            if player_gender not in ["Male", "Female"]:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"INVALID_GENDER"}')
+                return
 
             conn = None
             try:
@@ -549,10 +564,12 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                                     match_id,
                                     player_name,
                                     player_phone,
+                                    player_age_range,
+                                    player_gender,
                                     status,
                                     request_id
                                 )
-                                VALUES (%s, %s, %s, 'Pending', %s)
+                                VALUES (%s, %s, %s, %s, %s, 'Pending', %s)
                                 ON CONFLICT (request_id)
                                 WHERE request_id IS NOT NULL
                                 DO NOTHING
@@ -561,6 +578,8 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                                 match_id,
                                 player_name,
                                 player_phone,
+                                player_age_range,
+                                player_gender,
                                 request_id
                             ))
 
