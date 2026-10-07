@@ -346,10 +346,14 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 with psycopg.connect(database_url) as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            SELECT id, match_id, status
-                            FROM reservations
-                            ORDER BY id DESC
-                            LIMIT 1;
+                            SELECT reservations.id,
+       reservations.match_id,
+       reservations.status,
+       matches.spots_left
+FROM reservations
+JOIN matches ON reservations.match_id = matches.id
+ORDER BY reservations.id DESC
+LIMIT 1;
                         """)
                         row = cur.fetchone()
 
@@ -357,7 +361,8 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                     response_text = (
                         f"RESERVATION ID: {row[0]}\n"
                         f"MATCH ID: {row[1]}\n"
-                        f"STATUS: {row[2]}"
+                        f"STATUS: {row[2]}\n"
+                        f"SPOTS LEFT: {row[3]}"
                     )
                 else:
                     response_text = "NO RESERVATIONS"
