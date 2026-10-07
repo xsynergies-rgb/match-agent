@@ -242,7 +242,8 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"MATCH LOOKUP FAILED")
         elif self.path == "/latest-reservation":
-            conn = get_db_connection()
+            database_url = os.environ.get("DATABASE_URL")
+            conn = psycopg.connect(database_url)
             try:
                 with conn.cursor() as cur:
                     cur.execute("""
