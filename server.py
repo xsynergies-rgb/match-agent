@@ -283,7 +283,7 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
             try:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT id, match_id, status
+                        SELECT id, match_id, status, player_name, player_phone, player_age_range, player_gender
                         FROM reservations
                         ORDER BY id DESC
                         LIMIT 1;
@@ -298,7 +298,11 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
                     response = {
                         "reservation_id": row[0],
                         "match_id": row[1],
-                        "status": row[2]
+                        "status": row[2],
+                        "player_name": row[3],
+                        "player_phone": row[4],
+                        "player_age_range": row[5],
+                        "player_gender": row[6]
                     }
                 else:
                     response = {"reservation": None}
