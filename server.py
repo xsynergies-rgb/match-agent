@@ -60,6 +60,23 @@ def init_db():
                         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
+                if PITCH_OWNER_TOKEN:
+                    cur.execute("""
+                        INSERT INTO pitch_owners (name, phone, auth_token)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (phone) DO UPDATE
+                        SET auth_token = EXCLUDED.auth_token,
+                            status = 'Active'
+                        RETURNING id;
+                    """, ("Agdal Pitch Owner", "TEST-AGDAL-OWNER", PITCH_OWNER_TOKEN))
+
+                    owner_id = cur.fetchone()[0]
+
+                    cur.execute("""
+                        UPDATE pitches
+                        SET owner_id = %s
+                        WHERE id = 1;
+                    """, (owner_id,))
             conn.commit()
     except Exception:
         print("Database initialization failed safely.")
@@ -244,34 +261,6 @@ class MatchAgentServer(SimpleHTTPRequestHandler):
         elif self.path == "/latest-reservation":
             database_url = os.environ.get("DATABASE_URL")
             conn = psycopg.connect(database_url)
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        SELECT id, match_id, status
-                        FROM reservations
-                        ORDER BY id DESC
-                        LIMIT 1;
-                    """)
-                    row = cur.fetchone()
-
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-
-                if row:
-                    response = {
-                        "reservation_id": row[0],
-                        "match_id": row[1],
-                        "status": row[2]
-                    }
-                else:
-                    response = {"reservation": None}
-
-                self.wfile.write(json.dumps(response).encode("utf-8"))
-            finally:
-                conn.close()
-        elif self.path == "/latest-reservation":
-            conn = get_db_connection()
             try:
                 with conn.cursor() as cur:
                     cur.execute("""
