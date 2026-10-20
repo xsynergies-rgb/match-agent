@@ -81,8 +81,8 @@ DJANGO_SETTINGS_MODULE=config.settings.test .venv/bin/python manage.py makemigra
 3. Create your account in the app, put your phone in `GLOCAL_ADMIN_PHONES` and redeploy: you can then
    sign in to `/admin/` with the same phone and password. That's where bookings are confirmed,
    passwords are reset, pitches get owners and slots are managed.
-4. Run `python manage.py seed_pitches` once from the Render shell to create the launch pitches,
-   then give each pitch its **WhatsApp number** in `/admin/` → Pitches. Players who booked there
+4. The start command runs `seed_pitches`, which creates the launch pitches and keeps 14 days of
+   slots open. Give each pitch its **WhatsApp number** in `/admin/` → Pitches. Players who booked there
    message that number; a pitch without one falls back to the main organizer's number.
 
 Render's free Postgres is deleted 30 days after creation, and the free web service sleeps when idle

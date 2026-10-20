@@ -8,13 +8,16 @@ services:
     plan: free
     region: frankfurt # closest Render region to Morocco; must match the database's
     buildCommand: pip install --upgrade pip && pip install .
-    # Migrations run at start because the free plan has no pre-deploy step. gunicorn reads its
-    # worker count from WEB_CONCURRENCY.
+    # Migrations run at start because the free plan has no pre-deploy step or shell. seed_pitches
+    # only adds missing pitches and slots, so each start keeps 14 days of slots open (close a slot
+    # with "open for booking" in the admin rather than deleting it). gunicorn reads its worker
+    # count from WEB_CONCURRENCY.
     startCommand: >-
       python manage.py collectstatic --noinput &&
       python manage.py migrate --noinput &&
       python manage.py createcachetable &&
       python manage.py sync_admins &&
+      python manage.py seed_pitches &&
       gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 60
     healthCheckPath: /api/ready/
     autoDeploy: true
