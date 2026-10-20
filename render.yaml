@@ -1,0 +1,43 @@
+# Render Blueprint for the Glocal Sport API: one web service and its Postgres database.
+# Create it from the Render dashboard: New → Blueprint → pick this repository.
+# Entries with `sync: false` are secrets you type into the dashboard; they never live in git.
+services:
+  - type: web
+    name: glocal-sport-api
+    runtime: python
+    plan: free
+    region: frankfurt # closest Render region to Morocco; must match the database's
+    buildCommand: pip install --upgrade pip && pip install .
+    # Migrations run at start because the free plan has no pre-deploy step. gunicorn reads its
+    # worker count from WEB_CONCURRENCY.
+    startCommand: >-
+      python manage.py collectstatic --noinput &&
+      python manage.py migrate --noinput &&
+      python manage.py createcachetable &&
+      python manage.py sync_admins &&
+      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 60
+    healthCheckPath: /api/ready/
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.5
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: glocal-sport-db
+          property: connectionString
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Players sign in with phone + password. To turn on sign-in by WhatsApp/SMS code later, add
+      # PHONE_CODES_ENABLED=1, OTP_SENDER=twilio, OTP_CHANNELS and the TWILIO_* keys (see README).
+      - key: GLOCAL_ADMIN_PHONES
+        sync: false
+
+databases:
+  - name: glocal-sport-db
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "17"

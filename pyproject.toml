@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glocal-sport-backend"
+version = "1.0.0"
+description = "API for Glocal Sport: find a pickup football match and book a spot."
+requires-python = ">=3.12"
+dependencies = [
+    "Django==5.2.17",
+    "djangorestframework==3.17.2",
+    "djangorestframework-simplejwt==5.5.1",
+    "drf-spectacular==0.29.0",
+    "gunicorn==26.2.0",
+    "phonenumbers==9.0.40",
+    "psycopg[binary]==3.3.5",
+    "whitenoise==6.12.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["config*", "common*", "apps*"]
