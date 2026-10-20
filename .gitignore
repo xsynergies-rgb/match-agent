@@ -7,4 +7,5 @@ db.sqlite3
 staticfiles/
 .env
 .env.*
+!.env.example
 .DS_Store
